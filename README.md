@@ -131,7 +131,7 @@ To do when the boards arrive, in order. Record results here.
 
 ### Results so far
 
-**2026-10-26, Mingxi's Grove GPS (NOT an Air530):** it answers `$PMTK000` with `$PMTK001,0,3` and `$PMTK605`
+**2026-10-26, Prof. Zhou's Grove GPS (NOT an Air530):** it answers `$PMTK000` with `$PMTK001,0,3` and `$PMTK605`
 with firmware `AXN_2.31_3339_13111900 ... SIM28`: a SIMCom SIM28 (MediaTek MT3339), Seeed's older Grove - GPS.
 Indoors, by a window, it had a fix (7 satellites, HDOP 1.39). With the example and its TX on GP5:
 132 sentences, 0 bad checksums, 0 too long, 0 bytes dropped; position, time, date, altitude, HDOP and
@@ -148,7 +148,7 @@ Still to do on a real Air530 (kit board): checks 1 to 8 above.
 
 ## Credits
 
-The NMEA parser started from the A7_GPS_UART example in OCE360_560_codebase (Mingxi Zhou),
+The NMEA parser started from the A7_GPS_UART example in OCE360_560_codebase (Prof. Zhou),
 originally by Yousef Yasser, Rasheed Atia, and Seifeldin Khaled (2025, MIT).
 Air530 commands: Air530 user booklet v1.7 (Shanghai Luat), section 7.
 

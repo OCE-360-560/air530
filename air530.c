@@ -9,7 +9,7 @@
  * in the interrupt.
  *
  * The NMEA parser started from the A7_GPS_UART example in OCE360_560_codebase
- * (Mingxi Zhou), originally by Yousef Yasser, Rasheed Atia, and Seifeldin
+ * (Prof. Zhou), originally by Yousef Yasser, Rasheed Atia, and Seifeldin
  * Khaled (2025, MIT). Air530 commands: Air530 user booklet v1.7, section 7.
  *
  * Author:  OCE360/560 instructors
