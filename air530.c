@@ -51,6 +51,10 @@ static bool line_overflowed = false;
 
 static air530_fix_t latest_fix;
 static bool fix_is_new = false;
+// One new fix per second: RMC and GGA of the same second, in either order (see note_fix_sentence()).
+static int32_t rmc_waiting_ms = -1;     // time of an RMC whose GGA hasn't come yet
+static int32_t last_gga_ms = -1;        // time field of the last GGA
+static uint64_t last_gga_us = 0;        // when it arrived (0: none yet)
 static uint8_t satellites_in_view_by_talker[TALKER_COUNT];
 static air530_antenna_t antenna = AIR530_ANTENNA_UNKNOWN;
 static air530_stats_t stats;
@@ -247,6 +251,44 @@ static void parse_txt(char *fields[]) {
     else if (strstr(text, "ANTENNA SHORT") != NULL) antenna = AIR530_ANTENNA_SHORT;
 }
 
+/** "hhmmss.sss" -> milliseconds since midnight, or -1 if the field is empty or malformed. */
+static int32_t time_field_ms(const char *field) {
+    air530_fix_t scratch;
+    if (!parse_time(field, &scratch)) {
+        return -1;
+    }
+    return ((scratch.hour * 60 + scratch.minute) * 60 + scratch.second) * 1000 + scratch.millisecond;
+}
+
+/**
+ * Decide whether a fix is new. The receiver sends RMC and GGA once each per second; the fix is
+ * new once both for the same second are in, so time, position, satellites and HDOP match.
+ * If no GGA has come for 2 s (turned off, or lost), RMC alone makes a fix new. An RMC still
+ * waiting when the next one arrives counts as new then, so a lost GGA never loses a second.
+ */
+static void note_fix_sentence(bool is_rmc, int32_t time_ms) {
+    uint64_t now = time_us_64();
+    bool gga_flowing = last_gga_us != 0 && now - last_gga_us < 2000000;
+    if (is_rmc) {
+        if (rmc_waiting_ms >= 0) {
+            fix_is_new = true;   // the last RMC's GGA never came
+        }
+        rmc_waiting_ms = -1;
+        if (!gga_flowing || time_ms < 0 || time_ms == last_gga_ms) {
+            fix_is_new = true;   // no GGA to wait for, no time to pair on, or GGA came first
+        } else {
+            rmc_waiting_ms = time_ms;
+        }
+    } else {
+        last_gga_ms = time_ms;
+        last_gga_us = now;
+        if (rmc_waiting_ms >= 0 && time_ms == rmc_waiting_ms) {
+            fix_is_new = true;
+            rmc_waiting_ms = -1;
+        }
+    }
+}
+
 /** Check, report, and parse one sentence. text is changed in place. */
 static bool process_sentence(char *text) {
     if (text[0] != '$') {
@@ -265,9 +307,14 @@ static bool process_sentence(char *text) {
     int field_count = split_fields(text, fields, MAX_FIELDS);
     const char *header = fields[0];
 
+    bool is_rmc = false;
+    int32_t time_ms = -1;
     if (is_sentence_type(header, "RMC") && field_count >= RMC_MIN_FIELDS) {
+        is_rmc = true;
+        time_ms = time_field_ms(fields[1]);
         parse_rmc(fields, field_count, &latest_fix);
     } else if (is_sentence_type(header, "GGA") && field_count >= GGA_MIN_FIELDS) {
+        time_ms = time_field_ms(fields[1]);
         parse_gga(fields, field_count, &latest_fix);
     } else if (is_sentence_type(header, "GSA") && field_count >= GSA_MIN_FIELDS) {
         parse_gsa(fields, &latest_fix);
@@ -286,7 +333,7 @@ static bool process_sentence(char *text) {
         return false;   // VTG, GLL, ZDA ...: checked but not used
     }
     latest_fix.updated_us = time_us_64();
-    fix_is_new = true;
+    note_fix_sentence(is_rmc, time_ms);
     return true;
 }
 
@@ -322,6 +369,8 @@ bool air530_init(const air530_config_t *new_config) {
     memset(satellites_in_view_by_talker, 0, sizeof satellites_in_view_by_talker);
     memset(&stats, 0, sizeof stats);
     fix_is_new = false;
+    rmc_waiting_ms = last_gga_ms = -1;
+    last_gga_us = 0;
     antenna = AIR530_ANTENNA_UNKNOWN;
     ack_command = ack_result = -1;
 
@@ -427,6 +476,7 @@ bool air530_restart(air530_restart_t kind) {
     latest_fix.fix_type = 0;
     latest_fix.satellites_used = 0;
     fix_is_new = false;
+    rmc_waiting_ms = -1;
     return true;
 }
 

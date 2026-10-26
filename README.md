@@ -68,7 +68,7 @@ extension (open the `example` folder) or from the command line.
 |---|---|
 | `air530_init(&config)` | sets up the UART and its receive interrupt; false if config makes no sense |
 | `air530_service()` | parses every complete sentence received since the last call; call it every pass of your loop |
-| `air530_get_fix(&fix)` | copies the latest fix; true if an RMC or GGA arrived since the last call |
+| `air530_get_fix(&fix)` | copies the latest fix; true once per new fix (RMC and GGA of the same second) |
 | `air530_antenna()` | OK, OPEN or SHORT, from the receiver's `$GPTXT` messages |
 | `air530_get_stats(&stats)` | sentences, bad checksums, too-long lines, bytes dropped because the buffer was full |
 | `air530_set_echo(on)` | copy every received byte to USB serial too (debugging) |
@@ -139,7 +139,8 @@ satellites print correctly. So the **receive path and parser work on hardware**;
 (this chip ignores `$PGKC` and `$PCAS`; it speaks `$PMTK`). Observed on this chip:
 - Talker `$GP` only (GPS only): GGA, GSA, GSV (3 per second), RMC; no VTG, GLL, ZDA or TXT, so no antenna report.
   RMC has no v4.1 nav status field.
-- Check 3: each second prints twice (GGA and RMC both count as new). Still to decide: RMC only.
+- Check 3: each second printed twice (GGA and RMC both counted as new). FIXED 10/26: a fix is new once the RMC
+  and GGA of the same second are both in (RMC alone if no GGA for 2 s). On the SIM28: one line per second.
 - The position did not change at all over a minute indoors (MTK static navigation, or a still receiver).
 - First wiring had GPS TX on GP4: 0 bytes received; edges on GP4, none on GP5. Swap fixed it.
 

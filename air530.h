@@ -112,8 +112,9 @@ bool air530_init(const air530_config_t *config);
 int air530_service(void);
 
 /**
- * Copy the latest fix into fix. Returns true if an RMC or GGA arrived since the
- * last call (about twice a second at the default rate: one of each).
+ * Copy the latest fix into fix. Returns true once per new fix: when the RMC and GGA
+ * of the same second have both arrived (once a second at the default rate), or on
+ * RMC alone if no GGA has come for 2 s.
  */
 bool air530_get_fix(air530_fix_t *fix);
 

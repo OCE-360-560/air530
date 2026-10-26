@@ -215,24 +215,62 @@ static void on_sentence(const char *sentence) {
     snprintf(callback_last, sizeof callback_last, "%s", sentence);
 }
 
+static void send_with_checksum(const char *body) {
+    char line[160];
+    unsigned int checksum = 0;
+    for (const char *p = body; *p; p++) checksum ^= (unsigned char)*p;
+    snprintf(line, sizeof line, "$%s*%02X\r\n", body, checksum);
+    fake_uart_receive(line);
+}
+
 static void test_stream(void) {
     start(AIR530_CHIP_AIR530, 4);
     air530_fix_t fix;
     CHECK(!air530_get_fix(&fix));
 
-    // Half a sentence from before init, then a burst split at odd places
+    // Half a sentence from before init, then a burst split at odd places.
+    // A GGA alone is not a new fix: it only completes an RMC of the same second.
     fake_uart_receive("1,0.85,18.1,M,-34.2,M,,*77\r\n" NO_FIX_GGA "\r\n$GNRM");
     CHECK(air530_service() == 1);
-    CHECK(air530_get_fix(&fix));
+    CHECK(!air530_get_fix(&fix));
     CHECK(!fix.valid);
-    CHECK(!air530_get_fix(&fix));   // nothing new since
 
+    // RMC for 14:30:12 while GGAs are flowing: wait for its GGA
     fake_uart_receive("C,143012.000,A,4129.1234,N,07131.5678,W,0.12,87.30,291026,,,A,V*2E\r");
     CHECK(air530_service() == 1);   // '\r' ends the sentence; the '\n' after it is ignored
-    CHECK(air530_get_fix(&fix));
-    CHECK(fix.valid);
-    fake_uart_receive("\n" GPS_GSV "\r\n" FIX_GGA "\r\n");
+    CHECK(!air530_get_fix(&fix));
+    CHECK(fix.valid);               // the fields are already updated
+    fake_uart_receive("\n" GPS_GSV "\r\n");
+    CHECK(air530_service() == 0);
+    send_with_checksum("GNGGA,143012.000,4129.1234,N,07131.5678,W,1,09,0.85,18.1,M,-34.2,M,,");
     CHECK(air530_service() == 1);
+    CHECK(air530_get_fix(&fix));    // the pair is complete: one new fix
+    CHECK(fix.satellites_used == 9);
+    CHECK(!air530_get_fix(&fix));
+
+    // GGA first, then RMC of the same second: new on the RMC
+    send_with_checksum("GNGGA,143013.000,4129.1240,N,07131.5690,W,1,08,0.90,18.1,M,-34.2,M,,");
+    air530_service();
+    CHECK(!air530_get_fix(&fix));
+    send_with_checksum("GNRMC,143013.000,A,4129.1240,N,07131.5690,W,0.10,87.30,291026,,,A,V");
+    air530_service();
+    CHECK(air530_get_fix(&fix));
+    CHECK(fix.second == 13 && fix.satellites_used == 8);
+
+    // A lost GGA: the waiting RMC counts as new when the next RMC arrives
+    send_with_checksum("GNRMC,143014.000,A,4129.1241,N,07131.5691,W,0.00,,291026,,,A,V");
+    air530_service();
+    CHECK(!air530_get_fix(&fix));
+    send_with_checksum("GNRMC,143015.000,A,4129.1242,N,07131.5692,W,0.00,,291026,,,A,V");
+    air530_service();
+    CHECK(air530_get_fix(&fix));
+
+    // No GGA for over 2 s (turned off): RMC alone is new
+    sleep_ms(2500);
+    air530_get_fix(&fix);
+    send_with_checksum("GNRMC,143018.000,A,4129.1242,N,07131.5692,W,0.00,,291026,,,A,V");
+    air530_service();
+    CHECK(air530_get_fix(&fix));
 
     // Bytes lost mid-sentence: the '$' of the next sentence restarts the line
     fake_uart_receive("$GNRMC,143014.000,A,41" FIX_RMC "\r\n");
@@ -253,7 +291,7 @@ static void test_stream(void) {
     CHECK(stats.too_long == 1);
     CHECK(stats.bad_checksums == 0);
     CHECK(stats.bytes_dropped == 0);
-    CHECK(stats.sentences == 6);
+    CHECK(stats.sentences == 11);
 
     // Raw sentences go to the callback, checked, before parsing
     air530_set_sentence_callback(on_sentence);
