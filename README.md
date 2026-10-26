@@ -6,7 +6,7 @@ sentences once a second. This driver catches every byte in the UART interrupt, s
 write in main can't make it lose data, and parses RMC, GGA, GSA, GSV and TXT when you call
 `air530_service()`. Plain C11, no dynamic memory.
 
-**Status (2026-10-22): NOT RUN ON HARDWARE YET.** The boards arrive this week. Compiles with no
+**Status (2026-10-26): receive and parse checked on a SIM28 (not an Air530); Air530 commands NOT checked yet.** The boards arrive this week. Compiles with no
 warnings (SDK 2.3.0, `pico2`, toolchain 14_2_Rel1) and passes 146 host-test checks against a
 fake UART (`sh tests/run_tests.sh`). The Air530 command strings match every example in the Air530
 user booklet v1.7. The Air530Z (`$PCAS`) commands are from the CASIC protocol and have not been checked
@@ -128,6 +128,22 @@ To do when the boards arrive, in order. Record results here.
 7. Log through an SD card program for 5 minutes: `bytes_dropped` and `bad_checksums` should stay 0.
 8. GP4 idle voltage with the GPS connected: the Pico drives 3.3 V into a chip RX rated 2.8 V.
    Is there level shifting on the Grove board (schematic says?)? If not, decide whether that's OK.
+
+### Results so far
+
+**2026-10-26, Mingxi's Grove GPS (NOT an Air530):** it answers `$PMTK000` with `$PMTK001,0,3` and `$PMTK605`
+with firmware `AXN_2.31_3339_13111900 ... SIM28`: a SIMCom SIM28 (MediaTek MT3339), Seeed's older Grove - GPS.
+Indoors, by a window, it had a fix (7 satellites, HDOP 1.39). With the example and its TX on GP5:
+132 sentences, 0 bad checksums, 0 too long, 0 bytes dropped; position, time, date, altitude, HDOP and
+satellites print correctly. So the **receive path and parser work on hardware**; the commands do not apply
+(this chip ignores `$PGKC` and `$PCAS`; it speaks `$PMTK`). Observed on this chip:
+- Talker `$GP` only (GPS only): GGA, GSA, GSV (3 per second), RMC; no VTG, GLL, ZDA or TXT, so no antenna report.
+  RMC has no v4.1 nav status field.
+- Check 3: each second prints twice (GGA and RMC both count as new). Still to decide: RMC only.
+- The position did not change at all over a minute indoors (MTK static navigation, or a still receiver).
+- First wiring had GPS TX on GP4: 0 bytes received; edges on GP4, none on GP5. Swap fixed it.
+
+Still to do on a real Air530 (kit board): checks 1 to 8 above.
 
 ## Credits
 
