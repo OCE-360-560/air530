@@ -163,14 +163,15 @@ static bool parse_time(const char *field, air530_fix_t *fix) {
     return true;
 }
 
-/** "ddmmyy" -> fix date (years 2000 to 2099). */
+/** "ddmmyy" -> fix date (years 1980 to 2079). */
 static bool parse_date(const char *field, air530_fix_t *fix) {
     if (strlen(field) != 6 || !is_digits(field, 6)) {
         return false;
     }
     fix->day = two_digits(field);
     fix->month = two_digits(field + 2);
-    fix->year = 2000 + two_digits(field + 4);
+    int year = two_digits(field + 4);
+    fix->year = year >= 80 ? 1900 + year : 2000 + year;   // GPS time starts in 1980: before its first fix a receiver says 1980
     return true;
 }
 

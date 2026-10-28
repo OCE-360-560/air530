@@ -148,6 +148,11 @@ static void test_fix(void) {
     fix = current_fix();
     CHECK(fix.hour == 23 && fix.minute == 59 && fix.second == 59 && fix.millisecond == 500);
     CHECK(fix.year == 2026 && fix.month == 12 && fix.day == 31);
+
+    // Seen 2026-10-28 on a SIM28 after a cold start: the receiver's default date, 5 Jan 1980, is not 2080
+    air530_parse("$GPRMC,235943.800,V,,,,,0.00,0.00,050180,,,N*43");
+    fix = current_fix();
+    CHECK(fix.year == 1980 && fix.month == 1 && fix.day == 5);
 }
 
 static void test_other_talkers(void) {
